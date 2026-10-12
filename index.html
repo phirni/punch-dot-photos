@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Punch Editor</title>
+<style>
+:root{--bg:#f3f1ee;--panel:#fff;--ink:#262626;--muted:#6d6a67;--line:#dedbd6;--dark:#242424;--accent:#ee6666}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--dark);color:#fff;padding:16px 22px}header h1{font-size:20px;margin:0 0 3px}header p{margin:0;color:#d6d6d6;font-size:13px}
+.app{display:grid;grid-template-columns:330px minmax(0,1fr);min-height:calc(100vh - 70px)}
+aside{padding:14px;background:#faf9f7;border-right:1px solid var(--line);overflow:auto}
+main{padding:14px;min-width:0;display:flex;flex-direction:column;gap:10px;align-items:center}
+.section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:11px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px}
+label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin:9px 0 4px}
+label b{color:var(--ink);font-weight:600}
+input[type=file],select,button,input[type=number]{width:100%}
+input[type=file]{font-size:12px}
+select{padding:8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--dark)}
+input[type=color]{width:100%;height:32px;border:1px solid var(--line);border-radius:7px;padding:2px;background:#fff}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--ink)}
+.check input{width:auto}
+button{border:1px solid var(--line);border-radius:8px;padding:9px;background:#fff;cursor:pointer;font-weight:600;color:var(--ink)}
+button.primary{background:var(--dark);border-color:var(--dark);color:#fff}
+button:disabled{opacity:.4;cursor:not-allowed}
+.hint{font-size:11px;color:var(--muted);margin:7px 0 0}
+.swatches{display:flex;gap:6px;margin-top:8px}
+.swatches span{flex:1;height:24px;border-radius:6px;border:1px solid #0002;cursor:pointer}
+#stage{display:flex;width:100%;gap:0;box-shadow:0 4px 18px #0003;background:#d8d5d1}
+#stage.stacked{flex-direction:column;max-width:560px}
+#stage.side{flex-direction:row;max-width:1100px}
+#stage canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;min-width:0}
+.status{font-size:12px;color:var(--muted);min-height:18px;text-align:center}
+@media(max-width:850px){.app{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header><h1>Paper Punch Editor</h1><p>One photo + one sheet of paper. Punch shapes out of the paper, stick the pieces on the photo, and see the photo through the holes.</p></header>
+<div class="app">
+<aside>
+<div class="section"><h2>1 · Photo</h2>
+<input id="uploadPhoto" type="file" accept="image/*">
+<label>Aspect ratio</label>
+<select id="aspect"><option value="4:3" selected>4:3 landscape</option><option value="3:4">3:4 portrait</option><option value="1:1">1:1 square</option><option value="4:5">4:5 portrait</option><option value="16:9">16:9 wide</option></select>
+<label>Zoom <b id="zoomV">1.0×</b></label><input id="zoom" type="range" min="1" max="3" step="0.01" value="1">
+<label>Shift left / right</label><input id="offX" type="range" min="-0.5" max="0.5" step="0.005" value="0">
+<label>Shift up / down</label><input id="offY" type="range" min="-0.5" max="0.5" step="0.005" value="0">
+</div>
+
+<div class="section"><h2>2 · Paper</h2>
+<label>Paper colour</label><input id="paperColor" type="color" value="#f4b98c">
+<div class="swatches" id="swatches"></div>
+<label>Watercolour mottling <b id="blotchV">40</b></label><input id="blotch" type="range" min="0" max="100" value="40">
+<label>Grain <b id="grainV">14</b></label><input id="grain" type="range" min="0" max="60" value="14">
+<label>Gold specks <b id="specksV">120</b></label><input id="specks" type="range" min="0" max="500" value="120">
+<label>…or upload your own paper texture</label><input id="uploadPaper" type="file" accept="image/*">
+<button id="clearPaper" style="margin-top:6px">Use generated paper</button>
+</div>
+
+<div class="section"><h2>3 · Punch shapes</h2>
+<label>Shape</label>
+<select id="shapeType">
+<option value="mixed">Mixed sparkles</option><option value="sparkleLong">Long sparkle</option><option value="twinkle">Twinkle (4-point)</option><option value="burst">Burst (8-point)</option>
+<option value="star">Star</option><option value="heart">Heart</option><option value="circle">Dot / circle</option><option value="flower">Flower</option><option value="snowflake">Snowflake</option><option value="diamond">Diamond</option>
+<option value="upload" disabled>Uploaded shape image</option></select>
+<label>Upload a custom shape (transparent PNG or dark-on-white)</label><input id="uploadShape" type="file" accept="image/*">
+<div class="check"><input id="invertShape" type="checkbox"><span>Invert uploaded shape mask</span></div>
+<label>Count <b id="countV">14</b></label><input id="count" type="range" min="1" max="60" value="14">
+<label>Smallest size <b id="sizeMinV">3%</b></label><input id="sizeMin" type="range" min="1" max="20" value="3">
+<label>Largest size <b id="sizeMaxV">9%</b></label><input id="sizeMax" type="range" min="1" max="25" value="9">
+<div class="row" style="margin-top:8px"><button class="primary" id="scatter">Scatter shapes</button><button id="addOne">Add one</button></div>
+<label>Where do the punched pieces land?</label>
+<select id="pieceMode"><option value="scatter">Scattered elsewhere on the photo</option><option value="same">Same spot as the hole</option></select>
+<div class="row" style="margin-top:8px"><button id="shufflePieces">Shuffle pieces</button><button id="clearShapes">Clear all</button></div>
+<p class="hint">Click a shape in either panel to select it, drag to move it. Drag a hole in the paper panel, or a piece in the photo panel.</p>
+</div>
+
+<div class="section"><h2>Selected shape</h2>
+<label>Size <b id="selSizeV">–</b></label><input id="selSize" type="range" min="1" max="30" value="8" disabled>
+<label>Rotation <b id="selRotV">–</b></label><input id="selRot" type="range" min="0" max="360" value="0" disabled>
+<button id="deleteSel" style="margin-top:8px" disabled>Delete selected (Del)</button></div>
+
+<div class="section"><h2>4 · Look &amp; export</h2>
+<label>Layout</label><select id="layout"><option value="stacked">Stacked (photo on top, paper below)</option><option value="side">Side by side</option></select>
+<div class="check"><input id="shadows" type="checkbox" checked><span>Paper shadows</span></div>
+<label>Export width per panel</label><select id="exportW"><option value="1080">1080 px</option><option value="1600" selected>1600 px</option><option value="2400">2400 px</option></select>
+<button class="primary" id="exportBoth" style="margin-top:8px">Export both panels (PNG)</button>
+<div class="row" style="margin-top:8px"><button id="exportPhoto">Photo only</button><button id="exportPaper">Paper only</button></div>
+</div>
+</aside>
+<main>
+<div id="stage" class="stacked"><canvas id="cA"></canvas><canvas id="cB"></canvas></div>
+<div class="status" id="status">Upload a photo to begin. Everything stays in your browser.</div>
+</main></div>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const PW=720; // preview width per panel (internal units; shape sizes are fractions of this)
+const S={W:PW,H:Math.round(PW*4/3),photo:null,paperImg:null,paperId:0,uploadMask:null,shapes:[],sel:-1,zoom:1,offX:0,offY:0};
+const setStatus=t=>$('status').textContent=t;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+/* ---------- shape paths (unit radius, built under a scaled transform) ---------- */
+function curved(c,n,radii,k,start){
+ const tips=[];for(let i=0;i<n;i++){const a=start+i*2*Math.PI/n,r=radii[i%radii.length];tips.push([Math.cos(a)*r,Math.sin(a)*r,a])}
+ c.moveTo(tips[0][0],tips[0][1]);
+ for(let i=0;i<n;i++){const nx=tips[(i+1)%n],mid=tips[i][2]+Math.PI/n;c.quadraticCurveTo(Math.cos(mid)*k,Math.sin(mid)*k,nx[0],nx[1])}
+ c.closePath();
+}
+function rectPoly(c,ox,oy,ang,start,len,w){
+ const ca=Math.cos(ang),sa=Math.sin(ang);
+ const p=[[start,-w],[start+len,-w],[start+len,w],[start,w]].map(([u,v])=>[ox+u*ca-v*sa,oy+u*sa+v*ca]);
+ c.moveTo(p[0][0],p[0][1]);for(let i=1;i<4;i++)c.lineTo(p[i][0],p[i][1]);c.closePath();
+}
+const PATHS={
+ sparkleLong(c){const a=.6,k=.07;c.moveTo(0,-1);c.quadraticCurveTo(k,-k,a,0);c.quadraticCurveTo(k,k,0,1);c.quadraticCurveTo(-k,k,-a,0);c.quadraticCurveTo(-k,-k,0,-1);c.closePath()},
+ twinkle(c){curved(c,4,[1],.13,-Math.PI/2)},
+ burst(c){curved(c,8,[1,.55],.17,-Math.PI/2)},
+ star(c){for(let i=0;i<10;i++){const r=i%2?.45:1,a=-Math.PI/2+i*Math.PI/5;i?c.lineTo(Math.cos(a)*r,Math.sin(a)*r):c.moveTo(Math.cos(a)*r,Math.sin(a)*r)}c.closePath()},
+ heart(c){c.moveTo(0,.9);c.bezierCurveTo(-1.15,.05,-.85,-.95,0,-.35);c.bezierCurveTo(.85,-.95,1.15,.05,0,.9);c.closePath()},
+ circle(c){c.arc(0,0,.85,0,Math.PI*2)},
+ diamond(c){c.moveTo(0,-1);c.lineTo(.6,0);c.lineTo(0,1);c.lineTo(-.6,0);c.closePath()},
+ flower(c){for(let i=0;i<6;i++){const a=i*Math.PI/3,x=Math.cos(a)*.52,y=Math.sin(a)*.52;c.moveTo(x+.42,y);c.arc(x,y,.42,0,Math.PI*2)}c.moveTo(.3,0);c.arc(0,0,.3,0,Math.PI*2)},
+ snowflake(c){for(let i=0;i<6;i++){const a=i*Math.PI/3;rectPoly(c,0,0,a,0,.97,.055);const bx=Math.cos(a)*.55,by=Math.sin(a)*.55;rectPoly(c,bx,by,a+Math.PI/3,0,.32,.045);rectPoly(c,bx,by,a-Math.PI/3,0,.32,.045)}}
+};
+const MIXED=['sparkleLong','sparkleLong','twinkle','burst','burst'];
+function fillShape(ctx,type,r){
+ if(type==='upload'){const m=S.uploadMask;if(!m)return;const k=2*r/Math.max(m.width,m.height);ctx.drawImage(m,-m.width*k/2,-m.height*k/2,m.width*k,m.height*k);return}
+ ctx.save();ctx.scale(r,r);ctx.beginPath();PATHS[type](ctx);ctx.fill();ctx.restore();
+}
+
+/* ---------- paper ---------- */
+let paperCache={key:'',c:null};
+function mk(w,h){const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w));c.height=Math.max(1,Math.round(h));return c}
+function hexToRgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]}
+function buildPaper(w,h){
+ const col=$('paperColor').value,bl=+$('blotch').value,gr=+$('grain').value,sp=+$('specks').value;
+ const key=[w,h,col,bl,gr,sp,S.paperImg?S.paperId:0].join('|');
+ if(paperCache.key===key)return paperCache.c;
+ const c=mk(w,h),x=c.getContext('2d'),sc=w/PW;
+ if(S.paperImg){
+  const iw=S.paperImg.naturalWidth,ih=S.paperImg.naturalHeight,s=Math.max(w/iw,h/ih);
+  x.drawImage(S.paperImg,(w-iw*s)/2,(h-ih*s)/2,iw*s,ih*s);
+ }else{
+  x.fillStyle=col;x.fillRect(0,0,w,h);
+  const rnd=mulberry(7),[r0,g0,b0]=hexToRgb(col);
+  for(let i=0;i<80;i++){
+   const px=rnd()*w,py=rnd()*h,r=(.05+rnd()*.2)*w,light=rnd()>.5,a=(light?.25:.16)*bl/100;
+   const g=x.createRadialGradient(px,py,0,px,py,r);
+   const [cr,cg,cb]=light?[255,255,255]:[Math.round(r0*.7),Math.round(g0*.55),Math.round(b0*.55)];
+   g.addColorStop(0,`rgba(${cr},${cg},${cb},${a})`);g.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
+   x.fillStyle=g;x.fillRect(px-r,py-r,r*2,r*2);
+  }
+  if(gr>0){
+   const im=x.getImageData(0,0,c.width,c.height),d=im.data,r2=mulberry(11);
+   for(let i=0;i<d.length;i+=4){const n=(r2()-.5)*gr;d[i]+=n;d[i+1]+=n;d[i+2]+=n}
+   x.putImageData(im,0,0);
+  }
+  const r3=mulberry(23);
+  for(let i=0;i<sp;i++){
+   const px=r3()*w,py=r3()*h;x.fillStyle=`hsl(${38+r3()*14},${65+r3()*20}%,${48+r3()*22}%)`;
+   if(r3()<.72){x.beginPath();x.arc(px,py,(.6+r3()*1.7)*sc,0,Math.PI*2);x.fill()}
+   else{x.save();x.translate(px,py);fillShape(x,'twinkle',(2.5+r3()*4.5)*sc);x.restore()}
+  }
+ }
+ paperCache={key,c};return c;
+}
+
+/* ---------- photo ---------- */
+function drawPhoto(ctx,w,h){
+ if(!S.photo){
+  const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#44444c');g.addColorStop(1,'#17171b');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#ffffff99';ctx.font=Math.round(w*.04)+'px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('Upload a photo',w/2,h/2);return;
+ }
+ const iw=S.photo.naturalWidth,ih=S.photo.naturalHeight,s=Math.max(w/iw,h/ih)*S.zoom,dw=iw*s,dh=ih*s;
+ const mx=(dw-w)/2,my=(dh-h)/2;
+ ctx.drawImage(S.photo,(w-dw)/2+clamp(S.offX*w,-mx,mx)*-1,(h-dh)/2+clamp(S.offY*h,-my,my)*-1,dw,dh);
+}
+
+/* ---------- render ---------- */
+const linked=()=>$('pieceMode').value==='same';
+function piecePos(s){return linked()?{x:s.hx,y:s.hy,r:s.hr}:{x:s.px,y:s.py,r:s.pr}}
+function drawPiece(ctx,s,paper,w,h,sc,shadows){
+ const r=s.size*w,pad=Math.ceil(r*1.2)+6,hx=s.hx*w,hy=s.hy*h,P=piecePos(s);
+ const t=mk(pad*2,pad*2),tc=t.getContext('2d');
+ tc.save();tc.translate(pad,pad);tc.rotate(P.r);tc.fillStyle='#000';fillShape(tc,s.type,r);tc.restore();
+ tc.globalCompositeOperation='source-in';
+ tc.translate(pad,pad);tc.rotate(P.r-s.hr);tc.translate(-hx,-hy);tc.drawImage(paper,0,0);
+ ctx.save();
+ if(shadows){ctx.shadowColor='rgba(0,0,0,.38)';ctx.shadowBlur=5*sc;ctx.shadowOffsetY=2*sc}
+ ctx.drawImage(t,P.x*w-pad,P.y*h-pad);ctx.restore();
+}
+function render(W,H,sc,preview){
+ const w=Math.round(W*sc),h=Math.round(H*sc),shadows=$('shadows').checked;
+ const A=mk(w,h),B=mk(w,h),a=A.getContext('2d'),b=B.getContext('2d');
+ const paper=buildPaper(w,h);
+ drawPhoto(a,w,h);
+ S.shapes.forEach(s=>drawPiece(a,s,paper,w,h,sc,shadows));
+ // paper with real holes over the photo
+ const holes=mk(w,h),hc=holes.getContext('2d');hc.drawImage(paper,0,0);hc.globalCompositeOperation='destination-out';hc.fillStyle='#000';
+ S.shapes.forEach(s=>{hc.save();hc.translate(s.hx*w,s.hy*h);hc.rotate(s.hr);fillShape(hc,s.type,s.size*w);hc.restore()});
+ drawPhoto(b,w,h);
+ b.save();if(shadows){b.shadowColor='rgba(0,0,0,.4)';b.shadowBlur=6*sc;b.shadowOffsetY=2*sc}b.drawImage(holes,0,0);b.restore();
+ if(preview&&S.sel>=0&&S.shapes[S.sel]){
+  const s=S.shapes[S.sel],P=piecePos(s);
+  [[a,P.x,P.y],[b,s.hx,s.hy]].forEach(([ctx,x,y])=>{ctx.save();ctx.strokeStyle='#ee6666';ctx.lineWidth=2;ctx.setLineDash([6,4]);ctx.beginPath();ctx.arc(x*w,y*h,s.size*w*.95,0,Math.PI*2);ctx.stroke();ctx.restore()});
+ }
+ return{A,B};
+}
+
+/* ---------- preview ---------- */
+const cA=$('cA'),cB=$('cB');let queued=false;
+function schedule(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;draw()})}
+function draw(){
+ const[aw,ah]=$('aspect').value.split(':').map(Number);S.H=Math.round(S.W*ah/aw);
+ const{A,B}=render(S.W,S.H,1,true);
+ [[cA,A],[cB,B]].forEach(([c,src])=>{if(c.width!==src.width||c.height!==src.height){c.width=src.width;c.height=src.height}const x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);x.drawImage(src,0,0)});
+ $('stage').className=$('layout').value==='side'?'side':'stacked';
+ syncSel();
+}
+function label(id,t){$(id).textContent=t}
+function syncLabels(){
+ label('zoomV',(+$('zoom').value).toFixed(1)+'×');label('blotchV',$('blotch').value);label('grainV',$('grain').value);label('specksV',$('specks').value);
+ label('countV',$('count').value);label('sizeMinV',$('sizeMin').value+'%');label('sizeMaxV',$('sizeMax').value+'%');
+}
+function syncSel(){
+ const s=S.shapes[S.sel],on=!!s;
+ ['selSize','selRot','deleteSel'].forEach(i=>$(i).disabled=!on);
+ if(on){$('selSize').value=Math.round(s.size*100);$('selRot').value=Math.round(((s.hr%(2*Math.PI))+2*Math.PI)%(2*Math.PI)*180/Math.PI);label('selSizeV',$('selSize').value+'%');label('selRotV',$('selRot').value+'°')}
+ else{label('selSizeV','–');label('selRotV','–')}
+}
+
+/* ---------- shapes ---------- */
+function pickType(){
+ const t=$('shapeType').value;
+ if(t==='mixed')return MIXED[Math.floor(Math.random()*MIXED.length)];
+ if(t==='upload'&&!S.uploadMask){setStatus('Upload a shape image first.');return 'star'}
+ return t;
+}
+const tilt=type=>(type==='sparkleLong'||type==='twinkle')?(Math.random()-.5)*.5:Math.random()*Math.PI*2;
+function sampleSize(){const mn=+$('sizeMin').value/100,mx=Math.max(mn,+$('sizeMax').value/100);return mn+(mx-mn)*Math.pow(Math.random(),1.5)}
+function findSpot(sizes,list,size,tries=70){
+ for(let t=0;t<tries;t++){
+  const x=.04+Math.random()*.92,y=.04+Math.random()*.92;
+  if(list.every(o=>Math.hypot((o.x-x)*S.W,(o.y-y)*S.H)>(o.size+size)*S.W*.75))return{x,y};
+ }
+ return{x:.04+Math.random()*.92,y:.04+Math.random()*.92};
+}
+function scatter(){
+ const n=+$('count').value,holes=[],pieces=[];S.shapes=[];
+ for(let i=0;i<n;i++){
+  const type=pickType(),size=sampleSize(),h=findSpot(0,holes,size),p=findSpot(0,pieces,size),hr=tilt(type);
+  holes.push({...h,size});pieces.push({...p,size});
+  S.shapes.push({type,size,hx:h.x,hy:h.y,hr,px:p.x,py:p.y,pr:tilt(type)});
+ }
+ S.sel=-1;schedule();setStatus(n+' shapes punched. Click a shape to select and drag it.');
+}
+function addOne(){
+ const type=pickType(),size=sampleSize(),hr=tilt(type);
+ S.shapes.push({type,size,hx:.5,hy:.5,hr,px:.5,py:.5,pr:hr});S.sel=S.shapes.length-1;schedule();
+ setStatus('Shape added in the centre. Drag it where you want it.');
+}
+function shufflePieces(){
+ const pieces=[];S.shapes.forEach(s=>{const p=findSpot(0,pieces,s.size);s.px=p.x;s.py=p.y;s.pr=tilt(s.type);pieces.push({...p,size:s.size})});
+ if(linked())$('pieceMode').value='scatter';schedule();
+}
+
+/* ---------- pointer interaction ---------- */
+function toUnit(e,c){const r=c.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height}}
+function hit(u,isPhotoPanel){
+ for(let i=S.shapes.length-1;i>=0;i--){
+  const s=S.shapes[i],p=isPhotoPanel?piecePos(s):{x:s.hx,y:s.hy};
+  if(Math.hypot((p.x-u.x)*S.W,(p.y-u.y)*S.H)<=s.size*S.W*.85+6)return i;
+ }
+ return -1;
+}
+[[cA,true],[cB,false]].forEach(([c,isPhoto])=>{
+ let drag=null;
+ c.addEventListener('pointerdown',e=>{
+  const u=toUnit(e,c),i=hit(u,isPhoto);S.sel=i;
+  if(i>=0){const s=S.shapes[i],p=isPhoto?piecePos(s):{x:s.hx,y:s.hy};drag={i,dx:p.x-u.x,dy:p.y-u.y};c.setPointerCapture(e.pointerId)}
+  schedule();
+ });
+ c.addEventListener('pointermove',e=>{
+  if(!drag)return;const u=toUnit(e,c),s=S.shapes[drag.i],x=clamp(u.x+drag.dx,0,1),y=clamp(u.y+drag.dy,0,1);
+  if(isPhoto&&!linked()){s.px=x;s.py=y}else{s.hx=x;s.hy=y;if(linked()){s.px=x;s.py=y}}
+  schedule();
+ });
+ const end=()=>{drag=null};c.addEventListener('pointerup',end);c.addEventListener('pointercancel',end);
+});
+function deleteSel(){if(S.sel<0)return;S.shapes.splice(S.sel,1);S.sel=-1;schedule()}
+window.addEventListener('keydown',e=>{if((e.key==='Delete'||e.key==='Backspace')&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();deleteSel()}});
+$('deleteSel').addEventListener('click',deleteSel);
+$('selSize').addEventListener('input',e=>{const s=S.shapes[S.sel];if(s){s.size=e.target.value/100;schedule()}});
+$('selRot').addEventListener('input',e=>{const s=S.shapes[S.sel];if(s){s.hr=s.pr=e.target.value*Math.PI/180;schedule()}});
+
+/* ---------- uploads ---------- */
+function loadImg(file,cb){
+ if(!file)return;if(!file.type.startsWith('image/')){setStatus('Please choose an image file.');return}
+ const url=URL.createObjectURL(file),img=new Image();
+ img.onload=()=>cb(img);img.onerror=()=>setStatus('Could not decode that image. Try PNG or JPG.');img.src=url;
+}
+$('uploadPhoto').addEventListener('change',e=>loadImg(e.target.files[0],img=>{S.photo=img;S.zoom=1;S.offX=S.offY=0;$('zoom').value=1;$('offX').value=0;$('offY').value=0;syncLabels();schedule();
+ if(!S.shapes.length)scatter();else setStatus('Photo loaded.')}));
+$('uploadPaper').addEventListener('change',e=>loadImg(e.target.files[0],img=>{S.paperImg=img;S.paperId++;schedule();setStatus('Custom paper texture loaded.')}));
+$('clearPaper').addEventListener('click',()=>{S.paperImg=null;$('uploadPaper').value='';schedule()});
+function buildMask(img){
+ const w=img.naturalWidth,h=img.naturalHeight,c=mk(w,h),x=c.getContext('2d',{willReadFrequently:true});
+ x.drawImage(img,0,0);
+ try{
+  const im=x.getImageData(0,0,w,h),d=im.data,inv=$('invertShape').checked;let hasAlpha=false;
+  for(let i=3;i<d.length;i+=4)if(d[i]<250){hasAlpha=true;break}
+  for(let i=0;i<d.length;i+=4){
+   let a;
+   if(hasAlpha)a=d[i+3];else{const lum=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];a=d[i+3]*(255-lum)/255}
+   if(inv)a=255-a;
+   d[i]=d[i+1]=d[i+2]=0;d[i+3]=a;
+  }
+  x.putImageData(im,0,0);return c;
+ }catch(err){console.error(err);setStatus('Could not read that shape image.');return null}
+}
+let lastShapeImg=null;
+function setShapeImg(img){
+ lastShapeImg=img;const m=buildMask(img);if(!m)return;S.uploadMask=m;
+ const opt=$('shapeType').querySelector('option[value=upload]');opt.disabled=false;$('shapeType').value='upload';
+ setStatus('Custom shape ready. Press “Scatter shapes” or “Add one”.');schedule();
+}
+$('uploadShape').addEventListener('change',e=>loadImg(e.target.files[0],setShapeImg));
+$('invertShape').addEventListener('change',()=>{if(lastShapeImg)setShapeImg(lastShapeImg)});
+
+/* ---------- export ---------- */
+function download(canvas,name){
+ canvas.toBlob(b=>{if(!b){setStatus('Export failed (image too large for this browser?). Try a smaller width.');return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);setStatus('Exported '+name)},'image/png');
+}
+function doExport(which){
+ if(!S.photo){setStatus('Upload a photo first.');return}
+ const sc=+$('exportW').value/S.W;const{A,B}=render(S.W,S.H,sc,false);
+ if(which==='photo')return download(A,'punch-photo.png');
+ if(which==='paper')return download(B,'punch-paper.png');
+ const side=$('layout').value==='side',o=mk(side?A.width*2:A.width,side?A.height:A.height*2),x=o.getContext('2d');
+ x.drawImage(A,0,0);x.drawImage(B,side?A.width:0,side?0:A.height);download(o,'paper-punch.png');
+}
+$('exportBoth').addEventListener('click',()=>doExport('both'));
+$('exportPhoto').addEventListener('click',()=>doExport('photo'));
+$('exportPaper').addEventListener('click',()=>doExport('paper'));
+
+/* ---------- misc wiring ---------- */
+['#f4b98c','#ef8f8f','#f3e3c3','#c9b6e4','#a9c9a4','#9fc5e8'].forEach(c=>{
+ const s=document.createElement('span');s.style.background=c;s.title=c;s.onclick=()=>{$('paperColor').value=c;S.paperImg=null;schedule()};$('swatches').appendChild(s);
+});
+$('zoom').addEventListener('input',e=>{S.zoom=+e.target.value});
+$('offX').addEventListener('input',e=>{S.offX=+e.target.value});
+$('offY').addEventListener('input',e=>{S.offY=+e.target.value});
+$('scatter').addEventListener('click',scatter);
+$('addOne').addEventListener('click',addOne);
+$('shufflePieces').addEventListener('click',shufflePieces);
+$('clearShapes').addEventListener('click',()=>{S.shapes=[];S.sel=-1;schedule()});
+document.querySelector('aside').addEventListener('input',()=>{syncLabels();schedule()});
+document.querySelector('aside').addEventListener('change',()=>{syncLabels();schedule()});
+syncLabels();scatter();
+})();
+</script>
+</body>
+</html>
