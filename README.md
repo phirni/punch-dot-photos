@@ -14,3 +14,5 @@ Open `index.html` in any modern browser. No internet or libraries needed; photos
 3. Choose a shape (sparkles, star, heart, dot, flower, snowflake, diamond, or your own PNG) and press **Scatter shapes**.
 4. Click a shape in either panel to select it; drag to move. Hole = paper panel, piece = photo panel.
 5. Export both panels stacked/side by side, or each separately.
+
+<img width="3200" height="1200" alt="paper-punch" src="https://github.com/user-attachments/assets/30870952-20ff-45b6-9ce7-33af9d1297fa" />
